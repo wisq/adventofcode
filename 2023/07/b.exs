@@ -11,41 +11,41 @@ IO.stream(:stdio, :line)
 
   jokers = cards |> Enum.count(&(&1 == "J"))
 
-  sorted_groups =
+  sorted_freqs =
     cards
     |> Enum.reject(&(&1 == "J"))
-    |> Enum.group_by(& &1)
+    |> Enum.frequencies()
     |> Map.values()
-    |> Enum.sort_by(&(-Enum.count(&1)))
+    |> Enum.sort(:desc)
 
   type_sort =
-    case {jokers, sorted_groups} do
+    case {jokers, sorted_freqs} do
       # five of a kind
-      {0, [[a, a, a, a, a]]} -> 1
-      {1, [[a, a, a, a]]} -> 1
-      {2, [[a, a, a]]} -> 1
-      {3, [[a, a]]} -> 1
-      {4, [[_]]} -> 1
+      {0, [5]} -> 1
+      {1, [4]} -> 1
+      {2, [3]} -> 1
+      {3, [2]} -> 1
+      {4, [1]} -> 1
       {5, []} -> 1
       # four of a kind
-      {0, [[a, a, a, a], [_]]} -> 2
-      {1, [[a, a, a], [_]]} -> 2
-      {2, [[a, a], [_]]} -> 2
-      {3, [[_], [_]]} -> 2
+      {0, [4, 1]} -> 2
+      {1, [3, 1]} -> 2
+      {2, [2, 1]} -> 2
+      {3, [1, 1]} -> 2
       # full house
-      {0, [[a, a, a], [b, b]]} -> 3
-      {1, [[a, a], [b, b]]} -> 3
+      {0, [3, 2]} -> 3
+      {1, [2, 2]} -> 3
       # three of a kind
-      {0, [[a, a, a], [_], [_]]} -> 4
-      {1, [[a, a], [_], [_]]} -> 4
-      {2, [[_], [_], [_]]} -> 4
+      {0, [3, 1, 1]} -> 4
+      {1, [2, 1, 1]} -> 4
+      {2, [1, 1, 1]} -> 4
       # two pair
-      {0, [[a, a], [b, b], [_]]} -> 5
+      {0, [2, 2, 1]} -> 5
       # one pair
-      {0, [[a, a], [_], [_], [_]]} -> 6
-      {1, [[_], [_], [_], [_]]} -> 6
+      {0, [2, 1, 1, 1]} -> 6
+      {1, [1, 1, 1, 1]} -> 6
       # high card
-      {0, [[_], [_], [_], [_], [_]]} -> 7
+      {0, [1, 1, 1, 1, 1]} -> 7
     end
 
   card_sort = cards |> Enum.map(&Map.fetch!(card_sort_keys, &1))

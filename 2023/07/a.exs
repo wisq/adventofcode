@@ -9,21 +9,21 @@ IO.stream(:stdio, :line)
   cards = String.graphemes(cards_text)
   bid = String.to_integer(bid_text)
 
-  sorted_groups =
+  sorted_freqs =
     cards
-    |> Enum.group_by(& &1)
+    |> Enum.frequencies()
     |> Map.values()
-    |> Enum.sort_by(&(-Enum.count(&1)))
+    |> Enum.sort(:desc)
 
   type_sort =
-    case sorted_groups do
-      [[a, a, a, a, a]] -> 1
-      [[a, a, a, a], [_]] -> 2
-      [[a, a, a], [b, b]] -> 3
-      [[a, a, a], [_], [_]] -> 4
-      [[a, a], [b, b], [_]] -> 5
-      [[a, a], [_], [_], [_]] -> 6
-      [[_], [_], [_], [_], [_]] -> 7
+    case sorted_freqs do
+      [5] -> 1
+      [4, 1] -> 2
+      [3, 2] -> 3
+      [3, 1, 1] -> 4
+      [2, 2, 1] -> 5
+      [2, 1, 1, 1] -> 6
+      [1, 1, 1, 1, 1] -> 7
     end
 
   card_sort = cards |> Enum.map(&Map.fetch!(card_sort_keys, &1))

@@ -36,13 +36,13 @@ unused_x =
   Enum.min_max(used_x)
   |> then(fn {min, max} -> min..max end)
   |> Enum.reject(&(&1 in used_x))
-  |> IO.inspect(label: "Unused columns")
+  |> IO.inspect(label: "Unused columns", charlists: :as_lists)
 
 unused_y =
   Enum.min_max(used_y)
   |> then(fn {min, max} -> min..max end)
   |> Enum.reject(&(&1 in used_y))
-  |> IO.inspect(label: "Unused rows")
+  |> IO.inspect(label: "Unused rows", charlists: :as_lists)
 
 galaxies =
   galaxies

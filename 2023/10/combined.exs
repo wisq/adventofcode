@@ -227,7 +227,7 @@ defmodule Pipes do
       |> List.flatten()
       |> Enum.uniq()
       |> Enum.filter(fn coord ->
-        Map.get(grid, coord) == :ground
+        Map.get(grid, coord) in [:ground, :filler]
       end)
       |> MapSet.new()
 

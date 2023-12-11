@@ -5,22 +5,6 @@ defmodule Segment do
   )
 end
 
-defmodule Grid do
-  def update(grid, {row_index, col_index}, fun) do
-    grid
-    |> List.update_at(row_index, fn row ->
-      row
-      |> List.update_at(col_index, fun)
-    end)
-  end
-
-  def get(grid, {row_index, col_index}) do
-    grid
-    |> Enum.at(row_index)
-    |> Enum.at(col_index)
-  end
-end
-
 defmodule Coords do
   def add({row_a, column_a}, {row_b, column_b}) do
     {row_a + row_b, column_a + column_b}
@@ -55,12 +39,19 @@ defmodule Pipes do
 
   def run do
     IO.stream(:stdio, :line)
-    |> Enum.map(fn line ->
-      line
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {row, row_index} ->
+      row
       |> String.trim()
       |> String.graphemes()
-      |> Enum.map(&Map.fetch!(@symbols, &1))
+      |> Enum.with_index()
+      |> Enum.map(fn {cell, col_index} ->
+        {{row_index, col_index}, Map.fetch!(@symbols, cell)}
+      end)
     end)
+    |> Map.new()
+    |> connect_start()
+    |> IO.inspect(label: "Grid")
     |> loop_stream()
     |> Enum.to_list()
     |> IO.inspect(label: "Loop")
@@ -69,14 +60,21 @@ defmodule Pipes do
     |> IO.inspect(label: "Half of length")
   end
 
+  defp connect_start(grid) do
+    coords = find_start_coords(grid)
+
+    grid
+    |> Map.update!(coords, fn start ->
+      %Segment{start | connections: find_connections(grid, coords)}
+    end)
+  end
+
   defp loop_stream(grid) do
-    start_coords = find_start(grid)
-    grid = connect_start(grid, start_coords)
-    IO.inspect(grid, label: "Grid")
+    start_coords = find_start_coords(grid)
 
     Stream.resource(
       fn ->
-        {start_coords, Grid.get(grid, start_coords).connections |> Enum.at(0)}
+        {start_coords, Map.get(grid, start_coords).connections |> Enum.at(0)}
       end,
       fn
         :done ->
@@ -89,7 +87,7 @@ defmodule Pipes do
 
             next_coords ->
               inverse = Coords.invert(direction)
-              [next_direction] = Grid.get(grid, next_coords).connections |> List.delete(inverse)
+              [next_direction] = Map.get(grid, next_coords).connections |> List.delete(inverse)
               {[next_coords], {next_coords, next_direction}}
           end
       end,
@@ -97,22 +95,13 @@ defmodule Pipes do
     )
   end
 
-  defp find_start(grid) do
+  defp find_start_coords(grid) do
     grid
-    |> Enum.with_index()
-    |> Enum.reduce_while(nil, fn {row, row_index}, _ ->
-      case row |> Enum.find_index(&(&1 && &1.is_start)) do
-        nil -> {:cont, nil}
-        col_index -> {:halt, {row_index, col_index}}
-      end
+    |> Enum.find(fn
+      {_, %Segment{is_start: is_start}} -> is_start
+      {_, nil} -> false
     end)
-  end
-
-  defp connect_start(grid, coords) do
-    grid
-    |> Grid.update(coords, fn %Segment{is_start: true} = start ->
-      %Segment{start | connections: find_connections(grid, coords)}
-    end)
+    |> elem(0)
   end
 
   defp find_connections(grid, origin_coords) do
@@ -121,7 +110,7 @@ defmodule Pipes do
       neighbour_coords = direction |> Coords.add(origin_coords)
       inverse = Coords.invert(direction)
 
-      case Grid.get(grid, neighbour_coords) do
+      case Map.get(grid, neighbour_coords) do
         %Segment{connections: conns} -> inverse in conns
         nil -> false
       end

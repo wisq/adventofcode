@@ -26,7 +26,7 @@ defmodule Pipes do
     "J" => %Segment{connections: [north, west]},
     "7" => %Segment{connections: [south, west]},
     "F" => %Segment{connections: [south, east]},
-    "." => nil,
+    "." => :ground,
     "S" => %Segment{is_start: true}
   }
 
@@ -38,6 +38,14 @@ defmodule Pipes do
   ]
 
   def run do
+    load_grid()
+    |> connect_start()
+    |> IO.inspect(label: "Grid")
+    |> find_path_length()
+    |> find_inner_area()
+  end
+
+  defp load_grid do
     IO.stream(:stdio, :line)
     |> Enum.with_index()
     |> Enum.flat_map(fn {row, row_index} ->
@@ -50,14 +58,19 @@ defmodule Pipes do
       end)
     end)
     |> Map.new()
-    |> connect_start()
-    |> IO.inspect(label: "Grid")
+  end
+
+  defp find_path_length(grid) do
+    grid
     |> loop_stream()
     |> Enum.to_list()
     |> IO.inspect(label: "Loop")
     |> Enum.count()
     |> div(2)
     |> IO.inspect(label: "Half of length")
+  end
+
+  defp find_inner_area(grid) do
   end
 
   defp connect_start(grid) do
@@ -99,7 +112,7 @@ defmodule Pipes do
     grid
     |> Enum.find(fn
       {_, %Segment{is_start: is_start}} -> is_start
-      {_, nil} -> false
+      {_, :ground} -> false
     end)
     |> elem(0)
   end
@@ -112,7 +125,7 @@ defmodule Pipes do
 
       case Map.get(grid, neighbour_coords) do
         %Segment{connections: conns} -> inverse in conns
-        nil -> false
+        :ground -> false
       end
     end)
   end

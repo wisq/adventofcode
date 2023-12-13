@@ -1,11 +1,11 @@
 defmodule Mirrors do
-  def run do
+  def run(smudges) do
     IO.read(:stdio, :eof)
     |> String.trim()
     |> String.split("\n\n")
     |> Enum.with_index()
     |> Enum.map(fn {grid, index} ->
-      solve(grid)
+      solve(grid, smudges)
       |> IO.inspect(label: "Solution for grid #{index}")
     end)
     |> Enum.map(fn
@@ -16,21 +16,21 @@ defmodule Mirrors do
     |> IO.inspect(label: "Sum")
   end
 
-  defp solve(data) do
+  defp solve(data, smudges) do
     lines = data |> String.split("\n")
 
-    case solve_horizontal(lines) do
+    case solve_horizontal(lines, smudges) do
       {:ok, n} ->
         {:horizontal, n}
 
       :error ->
-        {:ok, n} = solve_vertical(lines)
+        {:ok, n} = solve_vertical(lines, smudges)
         {:vertical, n}
     end
   end
 
-  defp solve_horizontal(lines), do: lines |> solve_generic()
-  defp solve_vertical(lines), do: lines |> transpose() |> solve_generic()
+  defp solve_horizontal(lines, smudges), do: lines |> solve_generic(smudges)
+  defp solve_vertical(lines, smudges), do: lines |> transpose() |> solve_generic(smudges)
 
   defp transpose(lines) do
     lines
@@ -43,7 +43,7 @@ defmodule Mirrors do
     end)
   end
 
-  def solve_generic(lines) do
+  def solve_generic(lines, smudges) do
     lines = lines |> Enum.map(&to_binary_number/1)
 
     lines
@@ -51,20 +51,20 @@ defmodule Mirrors do
     |> Enum.chunk_every(2, 1, :discard)
     |> Enum.reduce_while(:error, fn
       [{n1, _i1}, {n2, i2}], _ ->
-        case (n1 == n2 || is_1bit_diff(n1, n2)) && is_mirrored(lines, i2) do
+        case (n1 == n2 || is_1bit_diff(n1, n2)) && is_mirrored(lines, i2, smudges) do
           true -> {:halt, {:ok, i2}}
           false -> {:cont, :error}
         end
     end)
   end
 
-  def is_mirrored(lines, index) do
+  def is_mirrored(lines, index, smudges) do
     {lines_before, lines_after} = Enum.split(lines, index)
 
     lines_before
     |> Enum.reverse()
     |> Enum.zip(lines_after)
-    |> Enum.reduce_while(1, fn
+    |> Enum.reduce_while(smudges, fn
       {same, same}, t ->
         {:cont, t}
 
@@ -99,4 +99,14 @@ defmodule Mirrors do
   end
 end
 
-Mirrors.run()
+case System.argv() do
+  [] ->
+    Mirrors.run(0)
+
+  ["--smudges"] ->
+    Mirrors.run(1)
+
+  _ ->
+    IO.puts(:stderr, "Usage: #{:escript.script_name()} [--smudges] < input")
+    exit({:shutdown, 1})
+end

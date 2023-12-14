@@ -2,6 +2,7 @@ defmodule SpinCycle do
   def run(cycles) do
     load_grid()
     |> spin_cycle(cycles)
+    |> inspect_grid()
     |> check_load()
   end
 
@@ -42,29 +43,21 @@ defmodule SpinCycle do
   defp one_spin_cycle(grid) do
     grid
     # roll rocks left (north)
-    |> roll()
+    |> roll(:left)
     # change grid to left = west, up = north
     |> transpose()
     # roll rocks left (west)
-    |> roll()
+    |> roll(:left)
     # change grid to left = north, up = west
     |> transpose()
-    # change grid to left = south, up = west
-    |> flip_rows()
-    # roll rocks left (south)
-    |> roll()
-    # change grid to left = west, up = south
+    # roll rocks right (south)
+    |> roll(:right)
+    # change grid to left = west, up = north
     |> transpose()
-    # change grid to left = east, up = south
-    |> flip_rows()
-    # roll rocks left (east)
-    |> roll()
-    # change grid to left = west, up = south
-    |> flip_rows()
-    # change grid to left = south, up = west
-    |> transpose()
+    # roll rocks right (east)
+    |> roll(:right)
     # change grid to left = north, up = west
-    |> flip_rows()
+    |> transpose()
   end
 
   defp transpose(grid) do
@@ -73,12 +66,7 @@ defmodule SpinCycle do
     |> Enum.map(&Tuple.to_list/1)
   end
 
-  defp flip_rows(grid) do
-    grid
-    |> Enum.map(&Enum.reverse/1)
-  end
-
-  defp roll(grid) do
+  defp roll(grid, direction) when direction in [:left, :right] do
     grid
     |> Enum.map(fn row ->
       row
@@ -89,11 +77,17 @@ defmodule SpinCycle do
       end)
       |> Enum.map(fn chunk ->
         chunk
-        |> Enum.sort_by(fn
-          ?# -> -1
-          ?O -> 0
-          ?. -> 1
-        end)
+        |> Enum.sort_by(
+          fn
+            ?# -> -1
+            ?O -> 0
+            ?. -> 1
+          end,
+          case direction do
+            :left -> :asc
+            :right -> :desc
+          end
+        )
       end)
       |> List.flatten()
     end)
@@ -102,8 +96,7 @@ defmodule SpinCycle do
   defp check_load(grid) do
     # grid arrives with north = left, no rotation needed
     grid
-    |> Enum.with_index(1)
-    |> Enum.map(fn {row, column} ->
+    |> Enum.map(fn row ->
       row
       |> Enum.reverse()
       |> Enum.with_index(1)
@@ -123,7 +116,7 @@ defmodule SpinCycle do
     grid
     # change to left = west, up = north
     |> transpose()
-    |> Enum.intersperse("\n")
+    |> Enum.map(fn row -> [row, "\n"] end)
     |> IO.puts()
 
     grid

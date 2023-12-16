@@ -5,15 +5,12 @@ defmodule Beams do
       grid: nil,
       bounds: nil,
       position: {-1, 0},
-      direction: {1, 0}
+      direction: {1, 0},
+      history: %{}
     )
   end
 
-  @ets :beam_history
-
   def run do
-    :ets.new(@ets, [:set, :public, :named_table])
-
     IO.stream(:stdio, :line)
     |> Enum.with_index()
     |> Enum.flat_map(fn {line, y} ->
@@ -27,11 +24,9 @@ defmodule Beams do
     end)
     |> build_state()
     |> walk()
-
-    :ets.tab2list(@ets)
-    |> Enum.map(fn {{pos, _dir}} -> pos end)
-    |> Enum.uniq()
-    |> Enum.count()
+    |> then(fn %State{history: hist} ->
+      Enum.count(hist)
+    end)
     |> IO.inspect(label: "Cells energized")
   end
 
@@ -90,13 +85,12 @@ defmodule Beams do
 
   defp walk(state) do
     {x, y} = state.position
-    {dx, dy} = state.direction
+    {dx, dy} = dir = state.direction
     new_x = x + dx
     new_y = y + dy
     new_pos = {new_x, new_y}
 
     {bounds_x, bounds_y} = state.bounds
-    hist_key = {new_pos, state.direction}
 
     cond do
       new_x not in bounds_x ->
@@ -105,13 +99,15 @@ defmodule Beams do
       new_y not in bounds_y ->
         state
 
-      :ets.lookup(@ets, hist_key) != [] ->
+      dir in Map.get(state.history, new_pos, []) ->
         state
 
       true ->
-        :ets.insert(@ets, {hist_key})
-
-        %State{state | position: new_pos}
+        %State{
+          state
+          | position: new_pos,
+            history: state.history |> Map.update(new_pos, [dir], fn list -> [dir | list] end)
+        }
         |> walk_step()
     end
   end
@@ -131,8 +127,13 @@ defmodule Beams do
 
   defp split(state, [dir1, dir2]) do
     IO.inspect({state.position, state.direction}, label: "split")
-    %State{state | direction: dir1} |> walk()
-    %State{state | direction: dir2} |> walk()
+
+    %State{state | direction: dir1}
+    |> walk()
+    |> then(fn new_state ->
+      %State{state | direction: dir2, history: new_state.history}
+    end)
+    |> walk()
   end
 end
 

@@ -10,24 +10,56 @@ defmodule Beams do
     )
   end
 
-  def run do
-    IO.stream(:stdio, :line)
-    |> Enum.with_index()
-    |> Enum.flat_map(fn {line, y} ->
-      line
-      |> String.trim()
-      |> String.graphemes()
+  def run(mode) when mode in [:one, :all] do
+    :timer.tc(fn ->
+      IO.stream(:stdio, :line)
       |> Enum.with_index()
-      |> Enum.map(fn {char, x} ->
-        {{x, y}, parse_grid_char(char)}
+      |> Enum.flat_map(fn {line, y} ->
+        line
+        |> String.trim()
+        |> String.graphemes()
+        |> Enum.with_index()
+        |> Enum.map(fn {char, x} ->
+          {{x, y}, parse_grid_char(char)}
+        end)
       end)
+      |> build_state()
+      |> do_run(mode)
     end)
-    |> build_state()
+    |> elem(0)
+    |> IO.inspect(label: "Runtime")
+  end
+
+  defp do_run(state, :one) do
+    state
     |> walk()
-    |> then(fn %State{history: hist} ->
-      Enum.count(hist)
-    end)
+    |> then(fn %State{history: hist} -> Enum.count(hist) end)
     |> IO.inspect(label: "Cells energized")
+  end
+
+  defp do_run(state, :all) do
+    {min_x..max_x, min_y..max_y} = state.bounds
+
+    [
+      # Top edge, going down:
+      for(x <- min_x..max_x, do: {{x, min_y - 1}, {0, 1}}),
+      # Bottom edge, going up:
+      for(x <- min_x..max_x, do: {{x, max_y + 1}, {0, -1}}),
+      # Left edge, going right:
+      for(y <- min_y..max_y, do: {{min_x - 1, y}, {1, 0}}),
+      # Right edge, going left:
+      for(y <- min_y..max_y, do: {{max_x + 1, y}, {-1, 0}})
+    ]
+    |> List.flatten()
+    |> Task.async_stream(fn {pos, dir} ->
+      %State{state | position: pos, direction: dir}
+      |> walk()
+      |> then(fn %State{history: hist} -> Enum.count(hist) end)
+      |> IO.inspect(label: "Cells energized for #{inspect(pos)} -> #{inspect(dir)}")
+    end)
+    |> Enum.map(fn {:ok, n} -> n end)
+    |> Enum.max()
+    |> IO.inspect(label: "Max cells energized")
   end
 
   defp parse_grid_char("."), do: :empty
@@ -126,8 +158,6 @@ defmodule Beams do
   end
 
   defp split(state, [dir1, dir2]) do
-    IO.inspect({state.position, state.direction}, label: "split")
-
     %State{state | direction: dir1}
     |> walk()
     |> then(fn new_state ->
@@ -137,4 +167,14 @@ defmodule Beams do
   end
 end
 
-Beams.run()
+case System.argv() do
+  ["--one"] ->
+    Beams.run(:one)
+
+  ["--all"] ->
+    Beams.run(:all)
+
+  _ ->
+    IO.puts(:stderr, "Usage: #{:escript.script_name()} <--one | --all> < input")
+    exit({:shutdown, 1})
+end

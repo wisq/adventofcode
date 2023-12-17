@@ -1,3 +1,40 @@
+defmodule Mode.Regular do
+  def next_directions({:north, 3}), do: [:east, :west]
+  def next_directions({:south, 3}), do: [:east, :west]
+  def next_directions({:east, 3}), do: [:north, :south]
+  def next_directions({:west, 3}), do: [:north, :south]
+
+  def next_directions({:north, _}), do: [:east, :west, :north]
+  def next_directions({:south, _}), do: [:east, :west, :south]
+  def next_directions({:east, _}), do: [:north, :south, :east]
+  def next_directions({:west, _}), do: [:north, :south, :west]
+
+  def next_directions({nil, 0}), do: [:north, :south, :east, :west]
+
+  def reject_final?({_, _}), do: false
+end
+
+defmodule Mode.Ultra do
+  def next_directions({:north, 10}), do: [:east, :west]
+  def next_directions({:south, 10}), do: [:east, :west]
+  def next_directions({:east, 10}), do: [:north, :south]
+  def next_directions({:west, 10}), do: [:north, :south]
+
+  def next_directions({:north, n}) when n in 1..3, do: [:north]
+  def next_directions({:south, n}) when n in 1..3, do: [:south]
+  def next_directions({:east, n}) when n in 1..3, do: [:east]
+  def next_directions({:west, n}) when n in 1..3, do: [:west]
+
+  def next_directions({:north, _}), do: [:east, :west, :north]
+  def next_directions({:south, _}), do: [:east, :west, :south]
+  def next_directions({:east, _}), do: [:north, :south, :east]
+  def next_directions({:west, _}), do: [:north, :south, :west]
+
+  def next_directions({nil, 0}), do: [:north, :south, :east, :west]
+
+  def reject_final?({_, count}), do: count < 4
+end
+
 defmodule LavaWalker do
   defmodule Block do
     @enforce_keys [:grid, :bounds, :start, :finish]
@@ -21,11 +58,11 @@ defmodule LavaWalker do
     )
   end
 
-  def run do
+  def run(mode) do
     block = load_block()
 
     block
-    |> best_path()
+    |> best_path(mode)
     |> inspect_path_moves(block)
     |> IO.inspect(label: "Best path")
   end
@@ -55,23 +92,31 @@ defmodule LavaWalker do
     end)
   end
 
-  defp best_path(block) do
-    [
-      %Path{position: block.start, distance_to_goal: distance(block.start, block.finish)}
-    ]
-    |> walk_best_path(block)
+  defp best_path(block, mode) do
+    dist = distance(block.start, block.finish)
+
+    [%Path{position: block.start, distance_to_goal: dist}]
+    |> walk_best_path(block, mode, dist + 1)
   end
 
-  defp walk_best_path(paths, block) do
+  defp walk_best_path(paths, block, mode, min_distance) do
     best =
       paths
       |> Enum.min_by(fn
         %Path{cost: c, distance_to_goal: d} -> {c, -d}
       end)
 
+    distance = best.distance_to_goal
+
+    min_distance =
+      case distance < min_distance do
+        true -> distance |> IO.inspect(label: "Distance")
+        false -> min_distance
+      end
+
     {new_best, new_walked} =
       best.last_moves
-      |> next_directions()
+      |> mode.next_directions()
       |> Enum.flat_map_reduce(block.walked, fn direction, walked ->
         new_pos = move(best.position, direction)
 
@@ -86,6 +131,10 @@ defmodule LavaWalker do
             {[], walked}
 
           new_last_moves in Map.get(walked, new_pos, []) ->
+            {[], walked}
+
+          new_pos == block.finish && mode.reject_final?(new_last_moves) ->
+            # we're at the end, but we haven't gone far enough in a straight line
             {[], walked}
 
           true ->
@@ -107,7 +156,8 @@ defmodule LavaWalker do
         end
       end)
 
-    inspect_new_paths(new_best, best)
+    # Debugging:
+    # inspect_new_paths(new_best, best)
     new_block = %Block{block | walked: new_walked}
 
     case Enum.find(new_best, &(&1.position == block.finish)) do
@@ -116,7 +166,7 @@ defmodule LavaWalker do
 
       _ ->
         (new_best ++ List.delete(paths, best))
-        |> walk_best_path(new_block)
+        |> walk_best_path(new_block, mode, min_distance)
     end
   end
 
@@ -132,20 +182,9 @@ defmodule LavaWalker do
   defp move({x, y}, :east), do: {x + 1, y}
   defp move({x, y}, :west), do: {x - 1, y}
 
-  defp next_directions({:north, 3}), do: [:east, :west]
-  defp next_directions({:south, 3}), do: [:east, :west]
-  defp next_directions({:east, 3}), do: [:north, :south]
-  defp next_directions({:west, 3}), do: [:north, :south]
-
-  defp next_directions({:north, _}), do: [:east, :west, :north]
-  defp next_directions({:south, _}), do: [:east, :west, :south]
-  defp next_directions({:east, _}), do: [:north, :south, :east]
-  defp next_directions({:west, _}), do: [:north, :south, :west]
-
-  defp next_directions({nil, 0}), do: [:north, :south, :east, :west]
-
   defp out_of_bounds({x, y}, {rx, ry}), do: x not in rx or y not in ry
 
+  # Used during debugging, or just for a cool visualisation.
   def inspect_new_paths(new_paths, old_path) do
     [
       render_at(old_path.position, ".", 1),
@@ -211,4 +250,14 @@ defmodule LavaWalker do
   defp inspect_direction(:west), do: "<"
 end
 
-LavaWalker.run()
+case System.argv() do
+  ["--ultra"] ->
+    LavaWalker.run(Mode.Ultra)
+
+  [] ->
+    LavaWalker.run(Mode.Regular)
+
+  _ ->
+    IO.puts(:stderr, "Usage: #{:escript.script_name()} [--ultra] < input")
+    exit({:shutdown, 1})
+end

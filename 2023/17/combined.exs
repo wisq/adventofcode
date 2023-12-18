@@ -1,3 +1,7 @@
+Mix.install([
+  {:prioqueue, "~> 0.2.0"}
+])
+
 defmodule Mode.Regular do
   def next_directions({:north, 3}), do: [:east, :west]
   def next_directions({:south, 3}), do: [:east, :west]
@@ -95,17 +99,20 @@ defmodule LavaWalker do
   defp best_path(block, mode) do
     dist = distance(block.start, block.finish)
 
-    [%Path{position: block.start, distance_to_goal: dist}]
+    Prioqueue.empty(cmp_fun: &cmp_best_path/2)
+    |> Prioqueue.insert(%Path{position: block.start, distance_to_goal: dist})
     |> walk_best_path(block, mode, dist + 1)
   end
 
-  defp walk_best_path(paths, block, mode, min_distance) do
-    best =
-      paths
-      |> Enum.min_by(fn
-        %Path{cost: c, distance_to_goal: d} -> {c, -d}
-      end)
+  defp cmp_best_path(path1, path2) do
+    Prioqueue.Helper.cmp(
+      {path1.cost, -path1.distance_to_goal},
+      {path2.cost, -path2.distance_to_goal}
+    )
+  end
 
+  defp walk_best_path(queue, block, mode, min_distance) do
+    {:ok, {best, queue}} = Prioqueue.extract_min(queue)
     distance = best.distance_to_goal
 
     min_distance =
@@ -165,7 +172,8 @@ defmodule LavaWalker do
         path
 
       _ ->
-        (new_best ++ List.delete(paths, best))
+        new_best
+        |> Enum.into(queue)
         |> walk_best_path(new_block, mode, min_distance)
     end
   end

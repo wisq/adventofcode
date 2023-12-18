@@ -1,7 +1,3 @@
-Mix.install([
-  {:memoize, "~> 1.4"}
-])
-
 defmodule Parser.Standard do
   @directions %{
     "U" => {0, -1},
@@ -40,8 +36,6 @@ defmodule Parser.Reversed do
 end
 
 defmodule Digger do
-  use Memoize
-
   defmodule BorderState do
     defstruct(
       position: {0, 0},
@@ -104,7 +98,7 @@ defmodule Digger do
     |> Enum.sum()
   end
 
-  defmemop count_row_filled(xs, prev_row, next_row) do
+  defp count_row_filled(xs, prev_row, next_row) do
     xs
     |> Enum.sort()
     |> Enum.chunk_while(

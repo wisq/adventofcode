@@ -6,11 +6,6 @@ defmodule Digger do
     )
   end
 
-  defmodule FillState do
-    @enforce_keys [:filled, :queue]
-    defstruct(@enforce_keys)
-  end
-
   @directions %{
     "U" => {0, -1},
     "D" => {0, 1},
@@ -34,9 +29,7 @@ defmodule Digger do
     end)
     |> Map.fetch!(:history)
     |> inspect_dig()
-    |> fill_interior()
-    |> inspect_dig()
-    |> Enum.count()
+    |> count_interior()
     |> IO.inspect(label: "Cells dug")
   end
 
@@ -48,58 +41,56 @@ defmodule Digger do
     |> Enum.reverse()
   end
 
-  defp fill_interior(border) do
+  defp count_interior(border) do
     border = MapSet.new(border)
-    {x_range, y_range} = grid_bounds(border)
 
-    start_y = Enum.min(y_range) + 1
+    border
+    |> Enum.group_by(fn {_, y} -> y end)
+    |> Enum.map(fn {y, coords} ->
+      coords
+      |> Enum.sort()
+      |> Enum.chunk_while(
+        nil,
+        fn
+          # starting the first border block
+          {x, ^y}, nil -> {:cont, {x, x + 1}}
+          # continuing a border block
+          {x, ^y}, {start, x} -> {:cont, {start, x + 1}}
+          # jumping to the start of a new border block
+          {new_x, ^y}, {start, old_x} -> {:cont, {{start, y}, {old_x - 1, y}}, {new_x, new_x + 1}}
+        end,
+        fn
+          {start, old_x} -> {:cont, {{start, y}, {old_x - 1, y}}, nil}
+        end
+      )
+      |> Enum.map_reduce({false, nil}, fn
+        {{x, y}, {x, y}}, {inside, last_border} ->
+          {1 + between_count(last_border, x, inside), {!inside, x}}
 
-    start_x =
-      x_range
-      |> Enum.find(fn x ->
-        {x, start_y - 1} in border and {x, start_y} not in border
+        {{x1, y} = left, {x2, y} = right}, {inside, last_border} ->
+          left_dirs = border_y_directions(left, border)
+          right_dirs = border_y_directions(right, border)
+          between = between_count(last_border, x1, inside)
+          inside = if left_dirs == right_dirs, do: inside, else: !inside
+
+          {x2 - x1 + 1 + between, {inside, x2}}
       end)
-
-    %FillState{
-      filled: border,
-      queue: [{start_x, start_y}] |> MapSet.new()
-    }
-    |> flood_fill()
-    |> Map.fetch!(:filled)
+      |> then(fn {counts, {false, _}} -> counts end)
+      |> Enum.sum()
+      |> IO.inspect(label: "Cells for row #{y}")
+    end)
+    |> Enum.sum()
   end
 
-  defp flood_fill(state) do
-    filled = state.filled
+  defp between_count(nil, _, _), do: 0
+  defp between_count(last, now, true), do: now - last - 1
+  defp between_count(_, _, false), do: 0
 
-    new_coords =
-      state.queue
-      |> Enum.flat_map(fn coord ->
-        neighbour_cells(coord)
-        |> Enum.reject(&(&1 in filled))
-      end)
-
-    case new_coords do
-      [] ->
-        state
-
-      _ ->
-        new_coords = MapSet.new(new_coords)
-
-        %FillState{
-          filled: MapSet.union(filled, new_coords),
-          queue: new_coords
-        }
-        |> flood_fill()
-    end
-  end
-
-  defp neighbour_cells({x, y}) do
-    [
-      {x, y - 1},
-      {x, y + 1},
-      {x - 1, y},
-      {x + 1, y}
-    ]
+  defp border_y_directions({x, y}, border) do
+    [-1, 1]
+    |> Enum.filter(fn dy ->
+      {x, y + dy} in border
+    end)
   end
 
   defp grid_bounds(cells) do

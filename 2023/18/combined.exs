@@ -2,6 +2,43 @@ Mix.install([
   {:memoize, "~> 1.4"}
 ])
 
+defmodule Parser.Standard do
+  @directions %{
+    "U" => {0, -1},
+    "D" => {0, 1},
+    "L" => {-1, 0},
+    "R" => {1, 0}
+  }
+
+  def parse_line(line) do
+    [direction, distance, _] = String.split(line, " ")
+
+    {
+      @directions |> Map.fetch!(direction),
+      distance |> String.to_integer()
+    }
+  end
+end
+
+defmodule Parser.Reversed do
+  @directions %{
+    ?3 => {0, -1},
+    ?1 => {0, 1},
+    ?2 => {-1, 0},
+    ?0 => {1, 0}
+  }
+
+  def parse_line(line) do
+    [_, _, colour] = line |> String.trim() |> String.split(" ")
+    <<"(#", distance::binary-size(5), direction, ")">> = colour
+
+    {
+      @directions |> Map.fetch!(direction),
+      distance |> String.to_integer(16)
+    }
+  end
+end
+
 defmodule Digger do
   use Memoize
 
@@ -12,23 +49,11 @@ defmodule Digger do
     )
   end
 
-  @directions %{
-    ?3 => {0, -1},
-    ?1 => {0, 1},
-    ?2 => {-1, 0},
-    ?0 => {1, 0}
-  }
-
-  def run do
+  def run(parser) do
     IO.stream(:stdio, :line)
     |> status("Walking")
     |> Enum.reduce(%BorderState{}, fn line, state ->
-      [_, _, colour] = line |> String.trim() |> String.split(" ")
-      <<"(#", distance::binary-size(5), direction, ")">> = colour
-
-      direction = @directions |> Map.fetch!(direction)
-      distance = distance |> String.to_integer(16)
-
+      {direction, distance} = parser.parse_line(line)
       [new_pos | _] = path = generate_path(state.position, direction, distance)
 
       %BorderState{
@@ -110,7 +135,6 @@ defmodule Digger do
     end)
     |> then(fn {counts, {false, _}} -> counts end)
     |> Enum.sum()
-    |> IO.inspect(label: "Filled row")
   end
 
   defp status(rval, text) do
@@ -127,4 +151,14 @@ defmodule Digger do
   end
 end
 
-Digger.run()
+case System.argv() do
+  [] ->
+    Digger.run(Parser.Standard)
+
+  ["--reversed"] ->
+    Digger.run(Parser.Reversed)
+
+  _ ->
+    IO.puts(:stderr, "Usage: #{:escript.script_name()} [--reversed] < input")
+    exit({:shutdown, 1})
+end

@@ -101,7 +101,7 @@ defmodule Pulses do
     %Conjunction{module | memory: memory}
   end
 
-  defp populate(name, module, _layout), do: module
+  defp populate(_name, module, _layout), do: module
 
   def push_button(layout, pushes) do
     %State{layout: layout, pushes: pushes}
@@ -158,14 +158,14 @@ defmodule Pulses do
          state,
          %Broadcaster{} = module,
          :broadcaster = name,
-         :button = source,
+         :button,
          :low = type
        ) do
     state
     |> send_pulse(name, type, module.targets)
   end
 
-  defp handle_pulse(state, %FlipFlop{} = module, _name, _source, :high) do
+  defp handle_pulse(state, %FlipFlop{}, _name, _source, :high) do
     state
   end
 
@@ -230,7 +230,7 @@ defmodule Pulses do
     end
   end
 
-  defp handle_pulse(state, %LCMConjunction{} = module, name, source, :low) do
+  defp handle_pulse(state, %LCMConjunction{}, _name, _source, :low) do
     state
   end
 

@@ -8,7 +8,7 @@ defmodule Stacker do
     bricks = parse_bricks()
     world = bricks |> Enum.map(& &1.coords) |> Enum.reduce(&MapSet.union/2)
 
-    {bricks, world} = fall_until_stable(bricks, world)
+    {bricks, world} = fall(bricks, world)
     zap_drops = count_zap_drops(bricks, world)
 
     zap_drops
@@ -54,15 +54,9 @@ defmodule Stacker do
   defp brick_coords({x, y1, z}, {x, y2, z}), do: y1..y2 |> Enum.map(fn y -> {x, y, z} end)
   defp brick_coords({x, y, z1}, {x, y, z2}), do: z1..z2 |> Enum.map(fn z -> {x, y, z} end)
 
-  defp fall_until_stable(bricks, world) do
-    case fall_once(bricks, world) do
-      {^bricks, ^world} -> {bricks, world}
-      {bricks, world} -> fall_until_stable(bricks, world)
-    end
-  end
-
-  defp fall_once(bricks, world) do
+  defp fall(bricks, world) do
     bricks
+    |> Enum.sort_by(& &1.lowest_z)
     |> Enum.map_reduce(world, &attempt_fall/2)
     |> then(fn {bricks, world} ->
       {MapSet.new(bricks), world}
@@ -133,7 +127,7 @@ defmodule Stacker do
     bricks = MapSet.delete(bricks, brick)
     world = MapSet.difference(world, brick.coords)
 
-    case fall_until_stable(bricks, world) do
+    case fall(bricks, world) do
       {^bricks, ^world} ->
         0
 

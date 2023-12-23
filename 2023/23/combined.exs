@@ -1,5 +1,19 @@
+defmodule Mode.Slopes do
+  def parse_cell(".", pos), do: {pos, :path}
+  def parse_cell(">", pos), do: {pos, :one_way_east}
+  def parse_cell("v", pos), do: {pos, :one_way_south}
+  def parse_cell("#", _), do: nil
+end
+
+defmodule Mode.Flat do
+  def parse_cell(".", pos), do: {pos, :path}
+  def parse_cell(">", pos), do: {pos, :path}
+  def parse_cell("v", pos), do: {pos, :path}
+  def parse_cell("#", _), do: nil
+end
+
 defmodule Hiking do
-  def run() do
+  def run(mode) do
     IO.stream(:stdio, :line)
     |> Enum.with_index()
     |> Enum.flat_map(fn {line, y} ->
@@ -7,23 +21,18 @@ defmodule Hiking do
       |> String.trim()
       |> String.graphemes()
       |> Enum.with_index()
-      |> Enum.map(fn
-        {".", x} -> {{x, y}, :path}
-        {">", x} -> {{x, y}, :one_way_east}
-        {"v", x} -> {{x, y}, :one_way_south}
-        {"#", _} -> nil
-      end)
+      |> Enum.map(fn {cell, x} -> mode.parse_cell(cell, {x, y}) end)
     end)
     |> Enum.reject(&is_nil/1)
     |> Map.new()
-    |> calculate_neighbours()
+    |> find_neighbours()
+    |> generate_graph()
     |> find_paths()
-    |> Enum.map(& &1.length)
     |> Enum.sort(:desc)
     |> IO.inspect(label: "Paths", charlists: :as_lists)
   end
 
-  defp calculate_neighbours(trails) do
+  defp find_neighbours(trails) do
     trails
     |> Map.new(fn {pos, cell} ->
       {pos, cell_neighbours(cell, pos, trails)}
@@ -43,49 +52,107 @@ defmodule Hiking do
     |> Enum.filter(&Map.has_key?(trails, &1))
   end
 
+  defmodule Node do
+    @enforce_keys [:type, :neighbours]
+    defstruct(@enforce_keys)
+  end
+
+  defp generate_graph(trails) do
+    {start, target} = Map.keys(trails) |> Enum.min_max_by(fn {_, y} -> y end)
+
+    nodes =
+      trails
+      |> Enum.filter(fn
+        {^start, _} -> true
+        {^target, _} -> true
+        {_, neighbours} -> Enum.count(neighbours) > 2
+      end)
+      |> Map.new()
+
+    node_types = %{
+      start => :start,
+      target => :target
+    }
+
+    nodes
+    |> Enum.map(fn {pos, neighbours} ->
+      node = %Node{
+        type: node_types |> Map.get(pos, :intersection),
+        neighbours:
+          neighbours
+          |> Enum.map(&walk_until_node(pos, &1, nodes, trails))
+          |> Enum.reject(&is_nil/1)
+      }
+
+      {pos, node}
+    end)
+    |> Map.new()
+    |> IO.inspect(label: "Nodes")
+  end
+
+  defp walk_until_node(from, to, nodes, trails, length \\ 1) do
+    case Map.has_key?(nodes, to) do
+      true ->
+        {to, length}
+
+      false ->
+        case trails |> Map.fetch!(to) |> Enum.reject(fn p -> p == from end) do
+          [] -> nil
+          [next] -> walk_until_node(to, next, nodes, trails, length + 1)
+        end
+    end
+  end
+
   defmodule Path do
     defstruct(
       position: nil,
-      length: -1,
-      seen: MapSet.new()
+      seen: MapSet.new(),
+      length: 0
     )
   end
 
   defp find_paths(trails) do
-    {start, target} = Map.keys(trails) |> Enum.min_max_by(fn {_, y} -> y end)
+    start = Map.keys(trails) |> Enum.min_by(fn {_, y} -> y end)
 
     %Path{}
-    |> walk_step(start, target, trails)
+    |> add_step(start, 0)
+    |> walk_neighbours(start, trails)
   end
 
-  defp walk_step(path, target, target, _trails) do
-    [path |> add_step(target)]
-  end
+  defp walk_neighbours(path, pos, trails) do
+    case trails |> Map.fetch!(pos) do
+      %Node{type: :target} ->
+        [path.length]
 
-  defp walk_step(path, pos, target, trails) do
-    next_steps =
-      trails
-      |> Map.fetch!(pos)
-      |> Enum.reject(fn p -> p == path.position || p in path.seen end)
-
-    case next_steps do
-      [] ->
-        []
-
-      [p] ->
-        path
-        |> add_step(pos)
-        |> walk_step(p, target, trails)
-
-      [_ | _] = ps ->
-        new_path = path |> add_step(pos)
-        ps |> Enum.flat_map(fn p -> walk_step(new_path, p, target, trails) end)
+      %Node{neighbours: neighbours} ->
+        neighbours
+        |> Enum.reject(fn {next_pos, _} -> next_pos in path.seen end)
+        |> Enum.flat_map(fn {next_pos, cost} ->
+          path
+          |> add_step(next_pos, cost)
+          |> walk_neighbours(next_pos, trails)
+        end)
     end
   end
 
-  defp add_step(path, pos) do
-    %Path{path | position: pos, length: path.length + 1, seen: MapSet.put(path.seen, pos)}
+  defp add_step(path, pos, cost) do
+    %Path{
+      path
+      | position: pos,
+        seen: MapSet.put(path.seen, pos),
+        length: path.length + cost
+    }
   end
 end
 
-Hiking.run()
+case System.argv() do
+  [] ->
+    Hiking.run(Mode.Slopes)
+
+  ["--flat"] ->
+    Hiking.run(Mode.Flat)
+
+  _ ->
+    IO.puts(:stderr, "Usage: #{:escript.script_name()} [--flat] < input")
+    exit({:shutdown, 1})
+end

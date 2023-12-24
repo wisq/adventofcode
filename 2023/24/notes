@@ -1,0 +1,27 @@
+xA = 19
+vxA = -2
+yA = 13
+vyA = 1
+
+xB = 18
+vxB = -1
+yB = 19
+vyB = -1
+
+mA = vxA / vyA
+mA = -2 / 1
+mA = -2
+
+y = mA*x + (yA - mA*xA)
+y = -2*x + (13 - -2*19)
+y = -2*x + 51
+0 = -2*x - 1y + 51
+
+mB = vxB / vyB
+mB = 1
+
+y = mB*x + (yB - mB*xB)
+y = mB*x + (yB - mB*xB)
+y = 1*x + (19 - 1*18)
+y = x + 1
+0 = x - y + 1x

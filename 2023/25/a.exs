@@ -108,23 +108,31 @@ defmodule Disco do
   defp three_cut_permutations(heatmap) do
     IO.puts("Generating permutations ...")
 
+    heatmap_with_index =
+      heatmap
+      |> Enum.map(fn {conn, _heat} -> conn end)
+      |> Enum.with_index()
+
     Stream.resource(
       fn ->
-        heatmap
-        |> Enum.with_index()
+        heatmap_with_index
         |> Enum.drop(2)
         |> :queue.from_list()
       end,
       fn queue ->
         case :queue.out(queue) do
-          {{:value, {{a, _}, index}}, new_queue} ->
-            above = Enum.take(heatmap, index)
+          {{:value, {a, a_index}}, new_queue} ->
+            above = Enum.take(heatmap_with_index, a_index)
 
             perms =
-              for {b, _} <- above,
-                  {c, _} <- above,
-                  b < c,
-                  do: {a, b, c}
+              above
+              |> Enum.flat_map(fn {b, b_index} ->
+                above
+                |> Enum.drop(b_index + 1)
+                |> Enum.map(fn {c, _} ->
+                  {a, b, c}
+                end)
+              end)
 
             {perms, new_queue}
 
